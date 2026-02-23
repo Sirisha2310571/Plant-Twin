@@ -10,6 +10,27 @@ class PlantMappingService:
     _instance = None
     _mapping: Dict[str, str] = {}
     
+    # Map AI classes to frontend assets folder names
+    _folder_mapping = {
+        "Aloe Vera": "aloe_vera",
+        "Anthurium (Anthurium andraeanum)": "anthurium",
+        "Begonia (Begonia spp.)": "begonia",
+        "Boston Fern (Nephrolepis exaltata)": "boston_fern",
+        "Calathea": "calathea",
+        "Chinese evergreen (Aglaonema)": "chinese",
+        "Dumb Cane (Dieffenbachia spp.)": "dumb_cane",
+        "Iron Cross begonia (Begonia masoniana)": "iron_cross_begonia",
+        "Monstera Deliciosa (Monstera deliciosa)": "monstera",
+        "Peace lily": "peace_lily",
+        "Pothos (Ivy arum)": "pothos",
+        "Rattlesnake Plant (Calathea lancifolia)": "rattlesnake_plant",
+        "Rubber Plant (Ficus elastica)": "rubber",
+        "Schefflera": "schefflera",
+        "Snake plant (Sanseviera)": "snake_plant",
+        "Tradescantia": "tradescantia",
+        "ZZ Plant (Zamioculcas zamiifolia)": "zz_plant"
+    }
+    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(PlantMappingService, cls).__new__(cls)
@@ -82,5 +103,9 @@ class PlantMappingService:
             return canonical_name
 
         return None
+
+    def resolve_folder_name(self, class_name: str) -> str:
+        """Resolves an AI class name to a frontend asset folder name."""
+        return self._folder_mapping.get(class_name, "monstera") # Default to monstera if unknown
 
 plant_mapping_service = PlantMappingService()

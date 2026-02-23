@@ -26,7 +26,10 @@ def get_plants(db: Session = Depends(database.get_db), current_user: User = Depe
 @router.post("/", response_model=PlantOut)
 async def create_plant(
     name: str = Form(...),
-    # species: str = Form(...), # Removed manual input
+    species: str = Form(None),
+    growth_stage: int = Form(0),
+    x: float = Form(0.0),
+    y: float = Form(0.0),
     file: UploadFile = File(...),
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user)
@@ -34,19 +37,26 @@ async def create_plant(
     # 1. Read Image Content
     file_bytes = await file.read()
     
-    # 2. Identify Plant
-    from app.services.plant_identification import plant_identification_service
-    identification_result = plant_identification_service.identify_plant(file_bytes)
-    
-    if "error" in identification_result:
-        raise HTTPException(status_code=500, detail=identification_result["error"])
+    # 2. Identify Plant (Fallback if species not provided)
+    if not species or species == "unknown":
+        from app.services.plant_identification import plant_identification_service
+        from app.services.mapping import plant_mapping_service
         
-    predicted_species = identification_result.get("canonical_name")
-    if not predicted_species:
-        predicted_species = identification_result.get("predicted_class", "Unknown")
+        identification_result = plant_identification_service.identify_plant(file_bytes)
         
-    confidence = identification_result.get("confidence", 0.0)
-    print(f"DEBUG: Identified Species: {predicted_species} (Conf: {confidence})")
+        if "error" in identification_result:
+            raise HTTPException(status_code=500, detail=identification_result["error"])
+            
+        predicted_class = identification_result.get("predicted_class", "Monstera Deliciosa (Monstera deliciosa)")
+        confidence = identification_result.get("confidence", 0.0)
+        
+        # Map class to folder name for frontend assets
+        species = plant_mapping_service.resolve_folder_name(predicted_class)
+        print(f"DEBUG: AI Identified {predicted_class} -> Mapping to folder: {species}")
+    else:
+        confidence = 1.0 # Manually selected
+        
+    print(f"DEBUG: Using Species: {species}")
 
     # 3. Save Image
     UPLOAD_DIR = "uploads"
@@ -68,9 +78,12 @@ async def create_plant(
     # 5. Create Plant
     new_plant = Plant(
         name=name,
-        species=predicted_species, # Use inferred species
+        species=species, 
         user_id=current_user.id,
-        image_path=f"uploads/{filename}"
+        image_path=f"uploads/{filename}",
+        growth_stage=growth_stage,
+        x=x,
+        y=y
     )
     db.add(new_plant)
     db.commit()
@@ -87,7 +100,7 @@ async def create_plant(
     # 7. Create Initial Log/Record (Optional, identifying record)
     new_record = DiseaseRecord(
         plant_id=new_plant.id,
-        predicted_class=predicted_species, # Log the identified species
+        predicted_class=species, # Log the species
         confidence=confidence,
         image_path=f"uploads/{filename}"
     )
@@ -279,11 +292,19 @@ def update_stage(
         
     if plant.plant_state:
         plant.plant_state.growth_stage = stage
+        
+        # Sync with garden growth_stage (int)
+        stages = ["Seedling", "Vegetative", "Flowering", "Fruiting", "HarvestReady"]
+        if stage in stages:
+            plant.growth_stage = stages.index(stage)
+            
         db.add(plant.plant_state)
+        db.add(plant)
         db.commit()
         db.refresh(plant.plant_state)
+        db.refresh(plant)
         
-    return {"message": "Growth stage updated", "new_stage": plant.plant_state.growth_stage}
+    return {"message": "Growth stage updated", "new_stage": plant.plant_state.growth_stage, "garden_stage": plant.growth_stage}
 @router.post("/identify")
 def identify_plant(name: str = Form(...)):
     """

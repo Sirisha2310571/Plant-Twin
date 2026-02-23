@@ -15,12 +15,23 @@ class AddPlantScreen extends StatefulWidget {
 
 class _AddPlantScreenState extends State<AddPlantScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  int _selectedStage = 0;
+  String _selectedSpecies = 'unknown';
+  final List<String> _speciesList = [
+    'unknown', 'anthurium', 'begonia', 'boston_fern', 'calathea', 'dumb_cane',
+    'iron_cross_begonia', 'pothos', 'rattlesnake_plant', 'schefflera',
+    'snake_plant', 'tradescantia', 'zz_plant', 'aloe_vera', 'chinese',
+    'monstera', 'peace_lily', 'rubber'
+  ];
 
-  XFile? _imageFile;
-  final picker = ImagePicker();
-  bool _isLoading = false;
+  final List<String> _stageNames = [
+    "Seedling", "Vegetative", "Budding", "Flowering", "Mature"
+  ];
   final _apiService = ApiService();
+  XFile? _imageFile;
+  final ImagePicker picker = ImagePicker();
+  final _nameController = TextEditingController();
+  bool _isLoading = false;
 
   Future _pickImage(ImageSource source) async {
     final pickedFile = await picker.pickImage(source: source);
@@ -43,9 +54,20 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final size = MediaQuery.of(context).size;
+      // Random position in soil area (bottom 35% of screen)
+      // We'll use a slightly safer range to avoid plants being cut off
+      final double x = 20 + (DateTime.now().millisecondsSinceEpoch % 1000) / 1000.0 * (size.width - 160);
+      final double soilTop = size.height * 0.65;
+      final double y = soilTop + 20 + ((DateTime.now().microsecondsSinceEpoch % 1000) / 1000.0 * (size.height * 0.2));
+
       await _apiService.createPlant(
         _nameController.text,
+        _selectedSpecies,
         _imageFile!,
+        growthStage: _selectedStage,
+        x: x,
+        y: y,
       );
 
       if (mounted) {
@@ -205,6 +227,43 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
                       validator: (value) => value!.isEmpty ? "Give your plant a name" : null,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _selectedSpecies,
+                      decoration: InputDecoration(
+                        labelText: "Plant Species",
+                        prefixIcon: const Icon(Icons.grass, color: AppTheme.primaryGreen),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: _speciesList.map((s) {
+                        String label = s == 'unknown' 
+                            ? "Auto-Identify (AI)" 
+                            : s.replaceAll('_', ' ').split(' ').map((str) => str.isNotEmpty ? str[0].toUpperCase() + str.substring(1) : str).join(' ');
+                        return DropdownMenuItem(
+                          value: s,
+                          child: Text(label),
+                        );
+                      }).toList(),
+                      onChanged: (val) => setState(() => _selectedSpecies = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      value: _selectedStage,
+                      decoration: InputDecoration(
+                        labelText: "Growth Stage",
+                        prefixIcon: const Icon(Icons.show_chart, color: AppTheme.primaryGreen),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: [0, 1, 2, 3, 4].map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(_stageNames[s]),
+                      )).toList(),
+                      onChanged: (val) => setState(() => _selectedStage = val!),
                     ),
                     const SizedBox(height: 12),
                     const Text(
