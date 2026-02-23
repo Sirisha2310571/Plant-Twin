@@ -15,7 +15,7 @@ class GrowthChart extends StatelessWidget {
     }
 
     // Sort logs by date
-    final sortedLogs = List<PlantLog>.from(logs)..sort((a, b) => a.date.compareTo(b.date));
+    final sortedLogs = List<PlantLog>.from(logs)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     
     // Map data points
     List<FlSpot> spots = [];
@@ -64,9 +64,9 @@ class GrowthChart extends StatelessWidget {
                     getTitlesWidget: (value, meta) {
                       int index = value.toInt();
                       if (index >= 0 && index < sortedLogs.length) {
-                        final date = DateTime.parse(sortedLogs[index].date);
+                        final date = sortedLogs[index].createdAt;
                         return SideTitleWidget(
-                          axisSide: meta.axisSide,
+                          meta: meta,
                           child: Text(
                             "${date.day}/${date.month}",
                              style: const TextStyle(color: Color(0xff68737d), fontWeight: FontWeight.bold, fontSize: 12),

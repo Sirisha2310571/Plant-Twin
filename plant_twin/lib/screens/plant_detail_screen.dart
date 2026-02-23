@@ -162,6 +162,13 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
     }
   }
 
+  String _getStageName(int stage) {
+    const stages = ["Seedling", "Vegetative", "Budding", "Flowering", "Mature"];
+    if (stage < 0) return stages[0];
+    if (stage >= stages.length) return stages.last;
+    return stages[stage];
+  }
+
   void _logGrowth() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image == null) return;
@@ -202,9 +209,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
     );
   }
 
-  void _updateGrowthStage(String currentStage) {
-    final List<String> stages = ["Seedling", "Vegetative", "Flowering", "Fruiting", "HarvestReady"];
-    String selectedStage = stages.contains(currentStage) ? currentStage : stages.first;
+  void _updateGrowthStage(int currentStageIndex) {
+    final List<String> stages = ["Seedling", "Vegetative", "Budding", "Flowering", "Mature"];
+    int selectedIndex = currentStageIndex;
 
     showDialog(
       context: context,
@@ -212,18 +219,18 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
         builder: (context, setState) {
           return AlertDialog(
             title: const Text("Update Stage"),
-            content: DropdownButton<String>(
-              value: selectedStage,
+            content: DropdownButton<int>(
+              value: selectedIndex,
               isExpanded: true,
-              items: stages.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (val) => setState(() => selectedStage = val!),
+              items: List.generate(stages.length, (i) => DropdownMenuItem(value: i, child: Text(stages[i]))),
+              onChanged: (val) => setState(() => selectedIndex = val!),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
               ElevatedButton(
                 onPressed: () async {
                   try {
-                    await _apiService.updateGrowthStage(widget.plantId, selectedStage);
+                    await _apiService.updateGrowthStage(widget.plantId, selectedIndex.toString());
                     Navigator.pop(context);
                     _refreshPlant();
                   } catch (e) {
@@ -358,7 +365,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                             const SizedBox(height: 12),
                             Row(
                               children: [
-                                Expanded(child: _vitalCard("Stage", state?.growthStage ?? "Seedling", Icons.eco, Colors.orange)),
+                                Expanded(child: _vitalCard("Stage", _getStageName(plant.growthStage), Icons.eco, Colors.orange)),
                                 const SizedBox(width: 12),
                                 Expanded(child: _vitalCard("Light", "Optimal", Icons.wb_sunny, Colors.amber)), // Placeholder
                               ],
@@ -469,7 +476,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                           const SizedBox(width: 12),
                           _verticalLine(),
                           const SizedBox(width: 12),
-                          _actionButton(Icons.timeline, "Stage", Colors.orange, () => _updateGrowthStage(state?.growthStage ?? "Seedling")),
+                          _actionButton(Icons.timeline, "Stage", Colors.orange, () => _updateGrowthStage(plant.growthStage)),
                         ],
                       ),
                     ),

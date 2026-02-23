@@ -10,6 +10,10 @@ class Plant {
   final List<DiseaseRecord>? diseaseRecords;
   final List<PlantLog>? logs;
 
+  final int growthStage;
+  final double x;
+  final double y;
+
   Plant({
     required this.id,
     required this.name,
@@ -19,6 +23,9 @@ class Plant {
     this.plantState,
     this.diseaseRecords,
     this.logs,
+    this.growthStage = 0,
+    this.x = 0.0,
+    this.y = 0.0,
   });
 
   factory Plant.fromJson(Map<String, dynamic> json) {
@@ -27,7 +34,10 @@ class Plant {
       name: json['name'],
       species: json['species'],
       userId: json['user_id'],
-      imagePath: json['image_path'], // Assuming backend returns relative path
+      imagePath: json['image_path'],
+      growthStage: json['growth_stage'] ?? 0,
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
       plantState: json['plant_state'] != null
           ? PlantState.fromJson(json['plant_state'])
           : null,

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -11,6 +11,9 @@ class Plant(Base):
     species = Column(String, index=True)
     image_path = Column(String, nullable=True)
     current_location = Column(String, default="Indoor") # Indoor or Outdoor
+    growth_stage = Column(Integer, default=0)
+    x = Column(Float, default=0.0)
+    y = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     owner = relationship("User", back_populates="plants")

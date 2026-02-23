@@ -13,13 +13,13 @@ class ApiService {
   // Dynamic Base URL
   static String get baseUrl {
     if (kIsWeb) {
-      return "http://localhost:8000";
+      return "http://127.0.0.1:8000";
     }
     if (defaultTargetPlatform == TargetPlatform.android) {
       return "http://10.0.2.2:8000";
     }
     // iOS, macOS, Windows, Linux
-    return "http://localhost:8000";
+    return "http://127.0.0.1:8000";
   }
 
   Future<String?> _getToken() async {
@@ -176,7 +176,7 @@ class ApiService {
     }
   }
 
-  Future<Plant> createPlant(String name, XFile imageFile) async {
+  Future<Plant> createPlant(String name, String species, XFile imageFile, {int growthStage = 0, double x = 0.0, double y = 0.0}) async {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
 
@@ -184,6 +184,10 @@ class ApiService {
     request.headers['Authorization'] = 'Bearer $token';
     
     request.fields['name'] = name;
+    request.fields['species'] = species;
+    request.fields['growth_stage'] = growthStage.toString();
+    request.fields['x'] = x.toString();
+    request.fields['y'] = y.toString();
 
     
     // Web compatible upload

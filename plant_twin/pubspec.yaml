@@ -28,8 +28,21 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/sky.jpg
-    - assets/images/land.png
+    - assets/images/
+    - assets/anthurium/
+    - assets/begonia/
+    - assets/boston_fern/
+    - assets/calathea/
+    - assets/dumb_cane/
+    - assets/iron_cross_begonia/
+    - assets/pothos/
+    - assets/rattlesnake_plant/
+    - assets/schefflera/
+    - assets/snake_plant/
+    - assets/tradescantia/
+    - assets/zz_plant/
     - assets/aloe_vera/
+    - assets/chinese/
     - assets/monstera/
     - assets/peace_lily/
+    - assets/rubber/
