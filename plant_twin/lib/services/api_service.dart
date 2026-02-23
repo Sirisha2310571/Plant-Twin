@@ -1,0 +1,504 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart'; // for kIsWeb
+import 'package:path/path.dart' as path;
+import '../models/user.dart';
+import '../models/user_profile.dart';
+import '../models/plant.dart';
+import '../models/reminder.dart';
+
+class ApiService {
+  // Dynamic Base URL
+  static String get baseUrl {
+    if (kIsWeb) {
+      return "http://localhost:8000";
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return "http://10.0.2.2:8000";
+    }
+    // iOS, macOS, Windows, Linux
+    return "http://localhost:8000";
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('access_token');
+  }
+
+  Future<void> _saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('access_token', token);
+  }
+
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('access_token');
+  }
+
+  // --- Auth ---
+
+  Future<AuthResponse> login(String email, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/login'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        'username': email, 
+        'password': password,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final authResponse = AuthResponse.fromJson(jsonDecode(response.body));
+      await _saveToken(authResponse.accessToken);
+      return authResponse;
+    } else {
+      throw Exception('Failed to login: ${response.body}');
+    }
+  }
+
+  Future<User> register(String email, String password, String fullName, String gardenType, {String? city}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email, 
+        'password': password,
+        'full_name': fullName,
+        'garden_type': gardenType,
+        'city': city,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return User.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to register: ${response.body}');
+    }
+  }
+
+  // --- Profile ---
+
+  Future<UserProfile> getUserProfile() async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/me'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return UserProfile.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to fetch profile');
+    }
+  }
+
+  Future<UserProfile> updateProfile(String fullName, String gardenType) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/users/me'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'full_name': fullName,
+        'garden_type': gardenType,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return UserProfile.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to update profile: ${response.body}');
+    }
+  }
+
+  // --- Plants ---
+
+  Future<List<Plant>> getPlants() async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/plants/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => Plant.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to fetch plants');
+    }
+  }
+
+  Future<Plant> getPlantDetails(int plantId) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/plants/$plantId'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return Plant.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to fetch plant details');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPlantProfile(int plantId) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/plants/$plantId/profile'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      return {};
+    }
+  }
+
+  Future<Plant> createPlant(String name, XFile imageFile) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/plants/'));
+    request.headers['Authorization'] = 'Bearer $token';
+    
+    request.fields['name'] = name;
+
+    
+    // Web compatible upload
+    final bytes = await imageFile.readAsBytes();
+    
+    var multipartFile = http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: imageFile.name,
+    );
+    
+    request.files.add(multipartFile);
+
+    var response = await request.send();
+
+    if (response.statusCode == 200) {
+      final respStr = await response.stream.bytesToString();
+      return Plant.fromJson(jsonDecode(respStr));
+    } else {
+      final respStr = await response.stream.bytesToString();
+      throw Exception('Failed to create plant: $respStr');
+    }
+  }
+
+  // --- Extended Features ---
+
+  Future<String> waterPlant(int plantId) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/plants/$plantId/water'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['message'] ?? "Plant watered successfully.";
+    } else {
+      throw Exception('Failed to water plant');
+    }
+  }
+
+  Future<void> addPlantLog(int plantId, double height, XFile? imageFile) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/plants/$plantId/log'));
+    request.headers['Authorization'] = 'Bearer $token';
+
+    request.fields['height'] = height.toString();
+
+    if (imageFile != null) {
+      final bytes = await imageFile.readAsBytes();
+      var multipartFile = http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: imageFile.name,
+      );
+      request.files.add(multipartFile);
+    }
+
+    var response = await request.send();
+
+    if (response.statusCode != 200) {
+      final respStr = await response.stream.bytesToString();
+      throw Exception('Failed to add log: $respStr');
+    }
+  }
+
+  Future<void> updateEnvironment(int plantId, double temperature) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/plants/$plantId/environment'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'temperature': temperature}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update environment');
+    }
+  }
+
+  Future<Map<String, dynamic>> analyzeDisease(int plantId, XFile imageFile) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/disease/analyze/$plantId'));
+    request.headers['Authorization'] = 'Bearer $token';
+
+    // Web compatible upload
+    final bytes = await imageFile.readAsBytes();
+    var multipartFile = http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: imageFile.name,
+    );
+    request.files.add(multipartFile);
+
+    var response = await request.send();
+
+    if (response.statusCode == 200) {
+      final respStr = await response.stream.bytesToString();
+      return jsonDecode(respStr);
+    } else {
+      final respStr = await response.stream.bytesToString();
+      throw Exception('Failed to analyze disease: $respStr');
+    }
+  }
+
+  Future<Map<String, dynamic>> getAdvice(String species, double temp) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/advice/?species=$species&temperature=$temp'),
+       headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get advice');
+    }
+  }
+
+  // --- Weather ---
+
+  Future<Map<String, dynamic>> getWeather(double lat, double lon) async {
+    // Note: Authentication might not be strictly required for weather depending on backend, 
+    // but good practice if available.
+    // final token = await _getToken(); 
+    
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/weather/?lat=$lat&lon=$lon'),
+        // headers: token != null ? {'Authorization': 'Bearer $token'} : {},
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {}; // Return empty map on failure to allow "Unknown" fallback
+      }
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // --- Reminders ---
+
+  Future<List<Reminder>> getReminders() async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/reminders/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => Reminder.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to fetch reminders');
+    }
+  }
+
+  Future<Reminder> createReminder(int plantId, String type, String date, String freq) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/reminders/$plantId'),
+      headers: {
+        'Authorization': 'Bearer $token', 
+        'Content-Type': 'application/json'
+      },
+      body: jsonEncode({
+        'reminder_type': type,
+        'next_due_date': date,
+        'frequency': freq,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return Reminder.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to create reminder: ${response.body}');
+    }
+  }
+
+  // --- Helper to get image URL ---
+  String getImageUrl(String relativePath) {
+    // Normalize path: Replace backslashes with forward slashes
+    String safePath = relativePath.replaceAll('\\', '/');
+    
+    // Remove leading slash if present to avoid double slash with baseUrl
+    if (safePath.startsWith('/')) {
+      safePath = safePath.substring(1);
+    }
+    
+    debugPrint("Constructed Image URL: $baseUrl/$safePath"); // Debug log
+    return "$baseUrl/$safePath";
+  }
+  Future<void> deletePlant(int plantId) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.delete(
+      Uri.parse('$baseUrl/plants/$plantId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete plant');
+    }
+  }
+
+  Future<void> updateGrowthStage(int plantId, String stage) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/plants/$plantId/stage'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+      body: {'stage': stage},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update stage: ${response.body}');
+    }
+  }
+
+  Future<List<dynamic>> getPlantChores(int plantId) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/plants/$plantId/chores'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch chores');
+    }
+  }
+  
+  Future<List<dynamic>> getAllChores() async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/plants/chores/all'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch all chores');
+    }
+  }
+
+  Future<void> updatePlantLocation(int plantId, String location) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/plants/$plantId/location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'location': location}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update location');
+    }
+  }
+
+  Future<Map<String, dynamic>> checkPlantHealth(int plantId, XFile imageFile) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/plants/$plantId/check-health'));
+    request.headers['Authorization'] = 'Bearer $token';
+
+    // Web compatible upload
+    final bytes = await imageFile.readAsBytes();
+    var multipartFile = http.MultipartFile.fromBytes(
+      'file',
+       bytes,
+      filename: imageFile.name,
+    );
+    request.files.add(multipartFile);
+
+    var response = await request.send();
+
+    if (response.statusCode == 200) {
+       final respStr = await response.stream.bytesToString();
+       return jsonDecode(respStr);
+    } else {
+       final respStr = await response.stream.bytesToString();
+       throw Exception('Failed to check health: $respStr');
+    }
+  }
+}
